@@ -343,6 +343,4 @@ class DSANet(nn.Module):
         sf_output = torch.transpose(sf_output, 1, 2)
         ar_output = self.ar(x)
         output = sf_output + ar_output
-        if self.n_targets > 0:
-            return output[:, :, -self.n_targets]
-        return output
+        return output[:, :, -self.n_targets] if self.n_targets > 0 else output

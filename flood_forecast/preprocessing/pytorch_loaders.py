@@ -50,7 +50,6 @@ class CSVDataLoader(Dataset):
         :param no_scale: This means that the end labels will not be scaled when running
         """
         super().__init__()
-        interpolate = interpolate_param
         self.forecast_history = forecast_history
         self.forecast_length = forecast_length
         print("interpolate should be below")
@@ -64,7 +63,7 @@ class CSVDataLoader(Dataset):
                 print("Created datetime feature columns are: ")
         print(relevant_cols3)
         self.relevant_cols3 = relevant_cols3
-        if interpolate:
+        if interpolate := interpolate_param:
             df = interpolate_dict[interpolate["method"]](df, **interpolate["params"])
         self.df = df[relevant_cols + relevant_cols3].copy()
         self.original_df = df
@@ -130,9 +129,7 @@ class CSVDataLoader(Dataset):
         :return: Returns the unscaled data as PyTorch tensor.
         :rtype: torch.Tensor
         """
-        if isinstance(result_data, pd.Series) or isinstance(
-            result_data, pd.DataFrame
-        ):
+        if isinstance(result_data, (pd.Series, pd.DataFrame)):
             result_data_np = result_data.values
         if isinstance(result_data, torch.Tensor):
             if len(result_data.shape) > 2:
@@ -174,10 +171,10 @@ class CSVSeriesIDLoader(CSVDataLoader):
         self.return_method = return_method
         self.return_all_series = return_all
         self.unique_cols = self.original_df[series_id_col].dropna().unique().tolist()
-        df_list = []
         self.unique_dict = {}
-        for col in self.unique_cols:
-            df_list.append(self.df[self.df[self.series_id_col] == col])
+        df_list = [
+            self.df[self.df[self.series_id_col] == col] for col in self.unique_cols
+        ]
         self.listed_vals = df_list
         self.__make_unique_dict__()
         print(self.unique_dict)
@@ -195,23 +192,21 @@ class CSVSeriesIDLoader(CSVDataLoader):
         :return: A set of dictionaries that contain the data for each series.
         :rtype: Tuple[Dict, Dict]
         """
-        if self.return_all_series:
-            src_list = {}
-            targ_list = {}
-            print(self.unique_cols)
-            for va in self.listed_vals:
-                t = torch.Tensor(va.iloc[idx: self.forecast_history + idx].values)[:, :len(self.relevant_cols3) - 1]
-                targ_start_idx = idx + self.forecast_history
-                idx2 = va[self.series_id_col].iloc[0]
-                targ = torch.Tensor(va.iloc[targ_start_idx: targ_start_idx + self.forecast_length].to_numpy())
-                src_list[self.unique_dict[idx2]] = t
-                targ_list[self.unique_dict[idx2]] = targ
-            return src_list, targ_list
-        else:
+        if not self.return_all_series:
             raise NotImplementedError
-        return super().__getitem__(idx)
+        src_list = {}
+        targ_list = {}
+        print(self.unique_cols)
+        for va in self.listed_vals:
+            t = torch.Tensor(va.iloc[idx: self.forecast_history + idx].values)[:, :len(self.relevant_cols3) - 1]
+            targ_start_idx = idx + self.forecast_history
+            idx2 = va[self.series_id_col].iloc[0]
+            targ = torch.Tensor(va.iloc[targ_start_idx: targ_start_idx + self.forecast_length].to_numpy())
+            src_list[self.unique_dict[idx2]] = t
+            targ_list[self.unique_dict[idx2]] = targ
+        return src_list, targ_list
 
-    def __sample_series_id__(idx, series_id):
+    def __sample_series_id__(self, series_id):
         pass
 
 
@@ -241,7 +236,7 @@ class CSVTestLoader(CSVDataLoader):
         if sort_column_clone:
             self.original_df = self.original_df.sort_values(by=sort_column_clone)
         print("CSV Path below")
-        print(df_path)
+        print(df_path1)
         self.forecast_total = forecast_total
         self.use_real_temp = use_real_temp
         self.use_real_precip = use_real_precip
@@ -280,13 +275,10 @@ class CSVTestLoader(CSVDataLoader):
         values to be stacked with forecasted cfs.
         """
         the_column = torch.from_numpy(rows_to_convert[the_col].to_numpy())
-        chunks = [
-            the_column[
-                self.forecast_length * i: self.forecast_length * (i + 1)
-            ]
+        return [
+            the_column[self.forecast_length * i : self.forecast_length * (i + 1)]
             for i in range(len(the_column) // self.forecast_length + 1)
         ]
-        return chunks
 
     def convert_history_batches(
         self, the_col: Union[str, List[str]], rows_to_convert: pd.DataFrame
@@ -300,13 +292,10 @@ class CSVTestLoader(CSVDataLoader):
             to be converted into batches
         """
         the_column = torch.from_numpy(rows_to_convert[the_col].to_numpy())
-        chunks = [
-            the_column[
-                self.forecast_history * i: self.forecast_history * (i + 1)
-            ]
+        return [
+            the_column[self.forecast_history * i : self.forecast_history * (i + 1)]
             for i in range(len(the_column) // self.forecast_history + 1)
         ]
-        return chunks
 
     def __len__(self) -> int:
         return (
@@ -414,7 +403,9 @@ class GeneralClassificationLoader(CSVDataLoader):
         targ_labs = torch.zeros(self.n_classes)
         casted_shit = int(targ.data.tolist())
         if casted_shit > self.n_classes:
-            raise ValueError("The class " + str(casted_shit) + " is greater than the number of classes " + str(self.n_classes)) # noqa 
+            raise ValueError(
+                f"The class {casted_shit} is greater than the number of classes {str(self.n_classes)}"
+            )
         targ_labs[casted_shit] = 1
         return src.float(), targ_labs.float().unsqueeze(0)
 
@@ -512,38 +503,36 @@ class TemporalTestLoader(CSVTestLoader):
         return torch.from_numpy(pandas_stuff.to_numpy()).float()
 
     def __getitem__(self, idx):
-        if self.target_supplied:
-            historical_rows = self.df.iloc[idx: self.forecast_history + idx]
-            target_idx_start = self.forecast_history + idx
-            # Why aren't we using these
-            # targ_rows = self.df.iloc[
-            #     target_idx_start : self.forecast_total + target_idx_start
-            historical_rows = self.other_feats.iloc[idx: self.forecast_history + idx]
-            targs_idx_start = self.forecast_history + idx
-            temporal_feat = self.temporal_df.iloc[idx: self.forecast_history + idx]
-            end_idx = self.forecast_total + target_idx_start
-            if self.decoder_step_len:
-                print("The label length is " + str(self.decoder_step_len))
-                targs_idx_start = targs_idx_start - self.decoder_step_len
-                print(targs_idx_start)
-                target_idx_start = target_idx_start - self.decoder_step_len
-                end_idx = self.forecast_total + target_idx_start + self.decoder_step_len
-                print(end_idx)
-                tar_temporal_feats = self.temporal_df.iloc[targs_idx_start: end_idx]
-                targ_rows = self.other_feats.iloc[targs_idx_start: end_idx]
-            else:
-                tar_temporal_feats = self.temporal_df.iloc[targs_idx_start: end_idx]
-                targ_rows = self.other_feats.iloc[targs_idx_start: end_idx]
-            src_data = self.df_to_numpy(historical_rows)
-            trg_data = self.df_to_numpy(targ_rows)
-            temporal_feat = self.df_to_numpy(temporal_feat)
-            tar_temp = self.df_to_numpy(tar_temporal_feats)
-            decoder_adjust = self.decoder_step_len if self.decoder_step_len else 0
-            all_rows_orig = self.original_df.iloc[
-                idx: self.forecast_total + target_idx_start + decoder_adjust
-            ].copy()
-            historical_rows = torch.from_numpy(historical_rows.to_numpy())
-            return (src_data, temporal_feat), (tar_temp, trg_data), all_rows_orig, target_idx_start
+        if not self.target_supplied:
+            return
+        historical_rows = self.df.iloc[idx: self.forecast_history + idx]
+        target_idx_start = self.forecast_history + idx
+        # Why aren't we using these
+        # targ_rows = self.df.iloc[
+        #     target_idx_start : self.forecast_total + target_idx_start
+        historical_rows = self.other_feats.iloc[idx: self.forecast_history + idx]
+        targs_idx_start = self.forecast_history + idx
+        temporal_feat = self.temporal_df.iloc[idx: self.forecast_history + idx]
+        end_idx = self.forecast_total + target_idx_start
+        if self.decoder_step_len:
+            print(f"The label length is {str(self.decoder_step_len)}")
+            targs_idx_start = targs_idx_start - self.decoder_step_len
+            print(targs_idx_start)
+            target_idx_start = target_idx_start - self.decoder_step_len
+            end_idx = self.forecast_total + target_idx_start + self.decoder_step_len
+            print(end_idx)
+        targ_rows = self.other_feats.iloc[targs_idx_start: end_idx]
+        tar_temporal_feats = self.temporal_df.iloc[targs_idx_start: end_idx]
+        src_data = self.df_to_numpy(historical_rows)
+        trg_data = self.df_to_numpy(targ_rows)
+        temporal_feat = self.df_to_numpy(temporal_feat)
+        tar_temp = self.df_to_numpy(tar_temporal_feats)
+        decoder_adjust = self.decoder_step_len if self.decoder_step_len else 0
+        all_rows_orig = self.original_df.iloc[
+            idx: self.forecast_total + target_idx_start + decoder_adjust
+        ].copy()
+        historical_rows = torch.from_numpy(historical_rows.to_numpy())
+        return (src_data, temporal_feat), (tar_temp, trg_data), all_rows_orig, target_idx_start
 
 
 class VariableSequenceLength(CSVDataLoader):
@@ -583,27 +572,27 @@ class VariableSequenceLength(CSVDataLoader):
         targ_labs = torch.zeros(self.n_classes)
         casted_shit = int(targ.data.tolist())
         if casted_shit > self.n_classes - 1:  # -1 because counting starts at zero
-            raise ValueError("The class " + str(casted_shit) + " is greater than the number of classes " + str(self.n_classes)) # noqa 
+            raise ValueError(
+                f"The class {casted_shit} is greater than the number of classes {str(self.n_classes)}"
+            )
         targ_labs[casted_shit] = 1
         return src.float(), targ_labs.float().unsqueeze(0)
 
     def get_item_auto_encoder(self, idx):
         item = self.grouped_df.get_group(self.uniques[idx])
         the_seq = torch.from_numpy(item.to_numpy())
-        if self.pad_length:
-            res = self.pad_input_data(the_seq)
-            return res.to(torch.float32), res.float()
-        else:
+        if not self.pad_length:
             return the_seq.float(), the_seq.float()
+        res = self.pad_input_data(the_seq)
+        return res.to(torch.float32), res.float()
 
     def pad_input_data(self, sequence: int):
         """Pads a sequence to a specified length
         """
-        if self.pad_length > sequence.shape[0]:
-            pad_dim = self.pad_length - sequence.shape[0]
-            return torch.nn.functional.pad(sequence, (0, 0, 0, pad_dim))
-        else:
+        if self.pad_length <= sequence.shape[0]:
             return sequence[self.pad_length, :]
+        pad_dim = self.pad_length - sequence.shape[0]
+        return torch.nn.functional.pad(sequence, (0, 0, 0, pad_dim))
 
     def __getitem__(self, idx: int):
         tasks = {"auto": self.get_item_auto_encoder, "classification": self.get_item_classification}

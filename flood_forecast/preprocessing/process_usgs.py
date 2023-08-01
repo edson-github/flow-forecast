@@ -9,17 +9,22 @@ import pytz
 def make_usgs_data(start_date: datetime, end_date: datetime, site_number: str) -> pd.DataFrame:
     """"""
     base_url = "https://nwis.waterdata.usgs.gov/usa/nwis/uv/?cb_00060=on&cb_00065&format=rdb&"
-    full_url = base_url + "site_no=" + site_number + "&period=&begin_date=" + \
-        start_date.strftime("%Y-%m-%d") + "&end_date=" + end_date.strftime("%Y-%m-%d")
+    full_url = (
+        (
+            f"{base_url}site_no={site_number}&period=&begin_date="
+            + start_date.strftime("%Y-%m-%d")
+        )
+        + "&end_date="
+    ) + end_date.strftime("%Y-%m-%d")
     print("Getting request from USGS")
     print(full_url)
     r = requests.get(full_url)
-    with open(site_number + ".txt", "w") as f:
+    with open(f"{site_number}.txt", "w") as f:
         f.write(r.text)
     print("Request finished")
-    response_data = process_response_text(site_number + ".txt")
+    response_data = process_response_text(f"{site_number}.txt")
     create_csv(response_data[0], response_data[1], site_number)
-    return pd.read_csv(site_number + "_flow_data.csv")
+    return pd.read_csv(f"{site_number}_flow_data.csv")
 
 
 def process_response_text(file_name: str) -> Tuple[str, Dict]:
@@ -63,11 +68,11 @@ def create_csv(file_path: str, params_names: dict, site_number: str):
     df = pd.read_csv(file_path, sep="\t")
     for key, value in params_names.items():
         df[value] = df[key]
-    df.to_csv(site_number + "_flow_data.csv")
+    df.to_csv(f"{site_number}_flow_data.csv")
 
 
 def get_timezone_map():
-    timezone_map = {
+    return {
         "EST": "America/New_York",
         "EDT": "America/New_York",
         "CST": "America/Chicago",
@@ -75,8 +80,8 @@ def get_timezone_map():
         "MDT": "America/Denver",
         "MST": "America/Denver",
         "PST": "America/Los_Angeles",
-        "PDT": "America/Los_Angeles"}
-    return timezone_map
+        "PDT": "America/Los_Angeles",
+    }
 
 
 def process_intermediate_csv(df: pd.DataFrame) -> (pd.DataFrame, int, int, int):

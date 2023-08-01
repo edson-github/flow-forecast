@@ -65,37 +65,43 @@ class Informer(nn.Module):
         self.encoder = Encoder(
             [
                 EncoderLayer(
-                    AttentionLayer(Attn(False, factor, attention_dropout=dropout),
-                                   d_model, n_heads),
-                    d_model,
-                    d_ff,
-                    dropout=dropout,
-                    activation=activation
-                ) for b in range(e_layers)
-            ],
-            [
-                ConvLayer(
-                    d_model
-                ) for b in range(e_layers - 1)
-            ],
-            norm_layer=torch.nn.LayerNorm(d_model)
-        )
-        # Decoder
-        self.decoder = Decoder(
-            [
-                DecoderLayer(
-                    AttentionLayer(FullAttention(True, factor, attention_dropout=dropout),
-                                   d_model, n_heads),
-                    AttentionLayer(FullAttention(False, factor, attention_dropout=dropout),
-                                   d_model, n_heads),
+                    AttentionLayer(
+                        Attn(False, factor, attention_dropout=dropout),
+                        d_model,
+                        n_heads,
+                    ),
                     d_model,
                     d_ff,
                     dropout=dropout,
                     activation=activation,
                 )
-                for c in range(d_layers)
+                for _ in range(e_layers)
             ],
-            norm_layer=torch.nn.LayerNorm(d_model)
+            [ConvLayer(d_model) for _ in range(e_layers - 1)],
+            norm_layer=torch.nn.LayerNorm(d_model),
+        )
+        # Decoder
+        self.decoder = Decoder(
+            [
+                DecoderLayer(
+                    AttentionLayer(
+                        FullAttention(True, factor, attention_dropout=dropout),
+                        d_model,
+                        n_heads,
+                    ),
+                    AttentionLayer(
+                        FullAttention(False, factor, attention_dropout=dropout),
+                        d_model,
+                        n_heads,
+                    ),
+                    d_model,
+                    d_ff,
+                    dropout=dropout,
+                    activation=activation,
+                )
+                for _ in range(d_layers)
+            ],
+            norm_layer=torch.nn.LayerNorm(d_model),
         )
         # self.end_conv1 = nn.Conv1d(in_channels=label_len+out_len, out_channels=out_len, kernel_size=1, bias=True)
         # self.end_conv2 = nn.Conv1d(in_channels=d_model, out_channels=c_out, kernel_size=1, bias=True)

@@ -110,8 +110,7 @@ class InferenceMode(object):
             inferL = DataLoader(loader, batch_size=batch_size)
         seq_list = []
         if over_lap_seq:
-            for x, y in inferL:
-                seq_list.append(self.model.model(x))
+            seq_list.extend(self.model.model(x) for x, y in inferL)
         else:
             for i in range(0, len(loader), dataset_params["sequence_length"]):
                 loader[i]  # TODO finish implementing
@@ -197,5 +196,10 @@ def load_model(model_params_dict, file_path: str, weight_path: str) -> PyTorchFo
         if "excluded_layers" in model_params_dict["weight_path_add"]:
             del model_params_dict["weight_path_add"]["excluded_layers"]
             # do stuff
-    m = PyTorchForecast(model_params_dict["model_name"], file_path, file_path, file_path, model_params_dict)
-    return m
+    return PyTorchForecast(
+        model_params_dict["model_name"],
+        file_path,
+        file_path,
+        file_path,
+        model_params_dict,
+    )

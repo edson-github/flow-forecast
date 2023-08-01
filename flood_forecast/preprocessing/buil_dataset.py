@@ -115,13 +115,9 @@ def create_usgs(meta_data_dir: str, precip_path: str, start: int, end: int):
                 data = json.load(f)
             if len(gage_id) == 7:
                 gage_id = "0" + gage_id
-                raw_df = make_usgs_data(
-                    datetime(2014, 1, 1), datetime(2019, 1, 1), gage_id
-                )
-            else:
-                raw_df = make_usgs_data(
-                    datetime(2014, 1, 1), datetime(2019, 1, 1), gage_id
-                )
+            raw_df = make_usgs_data(
+                datetime(2014, 1, 1), datetime(2019, 1, 1), gage_id
+            )
             df, max_flow, min_flow = process_intermediate_csv(raw_df)
             data["time_zone_code"] = df["tz_cd"].iloc[0]
             data["max_flow"] = max_flow
@@ -193,6 +189,6 @@ def get_data(file_path: str, gcp_service_key: Optional[str] = None) -> Union[str
         if str(local_temp_filepath)[-3:] != "csv":
             return local_temp_filepath
         return pd.read_csv(str(local_temp_filepath))
-    elif str(file_path)[-3:] != "csv":
+    elif file_path[-3:] != "csv":
         return file_path
     return pd.read_csv(file_path)

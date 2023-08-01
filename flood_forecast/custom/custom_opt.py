@@ -15,26 +15,20 @@ logger = logging.getLogger(__name__)
 
 
 def warmup_cosine(x, warmup=0.002):
-    if x < warmup:
-        return x / warmup
-    return 0.5 * (1.0 + torch.cos(math.pi * x))
+    return x / warmup if x < warmup else 0.5 * (1.0 + torch.cos(math.pi * x))
 
 
 def warmup_constant(x, warmup=0.002):
     """ Linearly increases learning rate over `warmup`*`t_total` (as provided to BertAdam) training steps.
         Learning rate is 1. afterwards. """
-    if x < warmup:
-        return x / warmup
-    return 1.0
+    return x / warmup if x < warmup else 1.0
 
 
 def warmup_linear(x, warmup=0.002):
     """ Specifies a triangular learning rate schedule where peak is reached at `warmup`*`t_total`-th
         (as provided to BertAdam) training step.
         After `t_total`-th training step, learning rate is zero. """
-    if x < warmup:
-        return x / warmup
-    return max((x - 1.) / (warmup - 1.), 0)
+    return x / warmup if x < warmup else max((x - 1.) / (warmup - 1.), 0)
 
 
 SCHEDULES = {
@@ -70,8 +64,7 @@ class MASELoss(torch.nn.Module):
         mae2 = MAE(output, target)
         mase4 = MAE(result_baseline, target)
         # Prevent divison by zero/loss exploding
-        if mase4 < 0.001:
-            mase4 = 0.001
+        mase4 = max(mase4, 0.001)
         return mae2 / mase4
 
 
@@ -89,19 +82,17 @@ class RMSELoss(torch.nn.Module):
         self.variance_penalty = variance_penalty
 
     def forward(self, output: torch.Tensor, target: torch.Tensor):
-        if len(output) > 1:
-
-            diff = torch.sub(target, output)
-            std_dev = torch.std(diff)
-            var_penalty = self.variance_penalty * std_dev
-
-            # torch.abs(target - output))
-            print('diff', diff)
-            print('std_dev', std_dev)
-            print('var_penalty', var_penalty)
-            return torch.sqrt(self.mse(target, output)) + var_penalty
-        else:
+        if len(output) <= 1:
             return torch.sqrt(self.mse(target, output))
+        diff = torch.sub(target, output)
+        std_dev = torch.std(diff)
+        var_penalty = self.variance_penalty * std_dev
+
+        # torch.abs(target - output))
+        print('diff', diff)
+        print('std_dev', std_dev)
+        print('var_penalty', var_penalty)
+        return torch.sqrt(self.mse(target, output)) + var_penalty
 
 
 class MAPELoss(torch.nn.Module):
@@ -174,9 +165,7 @@ class QuantileLoss(torch.nn.Module):
                     (q - 1) * errors,
                     q * errors
                 ).unsqueeze(1))
-        loss = torch.mean(
-            torch.sum(torch.cat(losses, dim=1), dim=1))
-        return loss
+        return torch.mean(torch.sum(torch.cat(losses, dim=1), dim=1))
 
 
 class BertAdam(Optimizer):
@@ -198,17 +187,17 @@ class BertAdam(Optimizer):
                  b1=0.9, b2=0.999, e=1e-6, weight_decay=0.01,
                  max_grad_norm=1.0):
         if lr is not required and lr < 0.0:
-            raise ValueError("Invalid learning rate: {} - should be >= 0.0".format(lr))
+            raise ValueError(f"Invalid learning rate: {lr} - should be >= 0.0")
         if schedule not in SCHEDULES:
-            raise ValueError("Invalid schedule parameter: {}".format(schedule))
-        if not 0.0 <= warmup < 1.0 and not warmup == -1:
-            raise ValueError("Invalid warmup: {} - should be in [0.0, 1.0[ or -1".format(warmup))
+            raise ValueError(f"Invalid schedule parameter: {schedule}")
+        if not 0.0 <= warmup < 1.0 and warmup != -1:
+            raise ValueError(f"Invalid warmup: {warmup} - should be in [0.0, 1.0[ or -1")
         if not 0.0 <= b1 < 1.0:
-            raise ValueError("Invalid b1 parameter: {} - should be in [0.0, 1.0[".format(b1))
+            raise ValueError(f"Invalid b1 parameter: {b1} - should be in [0.0, 1.0[")
         if not 0.0 <= b2 < 1.0:
-            raise ValueError("Invalid b2 parameter: {} - should be in [0.0, 1.0[".format(b2))
-        if not e >= 0.0:
-            raise ValueError("Invalid epsilon value: {} - should be >= 0.0".format(e))
+            raise ValueError(f"Invalid b2 parameter: {b2} - should be in [0.0, 1.0[")
+        if e < 0.0:
+            raise ValueError(f"Invalid epsilon value: {e} - should be >= 0.0")
         defaults = dict(lr=lr, schedule=schedule, warmup=warmup, t_total=t_total,
                         b1=b1, b2=b2, e=e, weight_decay=weight_decay,
                         max_grad_norm=max_grad_norm)
@@ -236,10 +225,7 @@ class BertAdam(Optimizer):
             closure (callable, optional): A closure that reevaluates the model
                 and returns the loss.
         """
-        loss = None
-        if closure is not None:
-            loss = closure()
-
+        loss = closure() if closure is not None else None
         warned_for_t_total = False
 
         for group in self.param_groups:
@@ -291,11 +277,10 @@ class BertAdam(Optimizer):
                     # warning for exceeding t_total (only active with warmup_linear
                     if group['schedule'] == "warmup_linear" and progress > 1. and not warned_for_t_total:
                         logger.warning(
-                            "Training beyond specified 't_total' steps with schedule '{}'. Learning rate set to {}. "
-                            "Please set 't_total' of {} correctly.".format(
-                                group['schedule'], lr_scheduled, self.__class__.__name__))
+                            f"Training beyond specified 't_total' steps with schedule '{group['schedule']}'. Learning rate set to {lr_scheduled}. Please set 't_total' of {self.__class__.__name__} correctly."
+                        )
                         warned_for_t_total = True
-                    # end warning
+                                # end warning
                 else:
                     lr_scheduled = group['lr']
 
@@ -304,10 +289,10 @@ class BertAdam(Optimizer):
 
                 state['step'] += 1
 
-                # step_size = lr_scheduled * math.sqrt(bias_correction2) / bias_correction1
-                # No bias correction
-                # bias_correction1 = 1 - beta1 ** state['step']
-                # bias_correction2 = 1 - beta2 ** state['step']
+                        # step_size = lr_scheduled * math.sqrt(bias_correction2) / bias_correction1
+                        # No bias correction
+                        # bias_correction1 = 1 - beta1 ** state['step']
+                        # bias_correction2 = 1 - beta2 ** state['step']
 
         return loss
 

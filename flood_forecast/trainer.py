@@ -37,12 +37,10 @@ def handle_model_evaluation1(trained_model, params: Dict, model_type: str) -> No
     mae = (df_train_and_test.loc[forecast_start_idx:, "preds"] -
             df_train_and_test.loc[forecast_start_idx:, params["dataset_params"]["target_col"][0]]).abs()
     inverse_mae = 1 / mae
-    i = 0
-    for df in df_prediction_samples:
+    for i, df in enumerate(df_prediction_samples):
         pred_std = df.std(axis=1)
         average_prediction_sharpe = (inverse_mae / pred_std).mean()
-        wandb.log({'average_prediction_sharpe' + str(i): average_prediction_sharpe})
-        i += 1
+        wandb.log({f'average_prediction_sharpe{str(i)}': average_prediction_sharpe})
     df_train_and_test.to_csv("temp_preds.csv")
     # Log plots now
     if "probabilistic" in params["inference_params"]:
@@ -98,17 +96,7 @@ def train_function(model_type: str, params: Dict) -> PyTorchForecast:
     For information on what this params_dict should include see `Confluence pages <https://flow-forecast.atlassian.net/wiki/spaces/FF/pages/92864513/Getting+Started>`_ on training models. 
     """
     dataset_params = params["dataset_params"]
-    if model_type == "da_rnn":
-        from flood_forecast.da_rnn.train_da import da_rnn, train
-        from flood_forecast.preprocessing.preprocess_da_rnn import make_data
-        preprocessed_data = make_data(
-            params["dataset_params"]["training_path"],
-            params["dataset_params"]["target_col"],
-            params["dataset_params"]["forecast_length"])
-        config, model = da_rnn(preprocessed_data, len(dataset_params["target_col"]))
-        # All train functions return trained_model
-        trained_model = train(model, preprocessed_data, config)
-    elif model_type == "PyTorch":
+    if model_type == "PyTorch":
         dataset_params["batch_size"] = params["training_params"]["batch_size"]
         trained_model = PyTorchForecast(
             params["model_name"],
@@ -116,11 +104,15 @@ def train_function(model_type: str, params: Dict) -> PyTorchForecast:
             dataset_params["validation_path"],
             dataset_params["test_path"],
             params)
-        class2 = False if trained_model.params["dataset_params"]["class"] != "GeneralClassificationLoader" else True
-        takes_target = False
-        if "takes_target" in trained_model.params:
-            takes_target = trained_model.params["takes_target"]
-
+        class2 = (
+            trained_model.params["dataset_params"]["class"]
+            == "GeneralClassificationLoader"
+        )
+        takes_target = (
+            trained_model.params["takes_target"]
+            if "takes_target" in trained_model.params
+            else False
+        )
         if "inference_params" in trained_model.params:
             if "dataset_params" not in trained_model.params["inference_params"]:
                 print("Using generic dataset params")
@@ -141,17 +133,26 @@ def train_function(model_type: str, params: Dict) -> PyTorchForecast:
                                 takes_target=takes_target,
                                 forward_params={}, class2=class2)
         if "scaler" in dataset_params and "inference_params" in params:
-            if "scaler_params" in dataset_params:
-                params["inference_params"]["dataset_params"]["scaling"] = scaling_function({},
-                                                                                           dataset_params)["scaling"]
-            else:
-                params["inference_params"]["dataset_params"]["scaling"] = scaling_function({},
-                                                                                           dataset_params)["scaling"]
+            params["inference_params"]["dataset_params"]["scaling"] = scaling_function({},
+                                                                                       dataset_params)["scaling"]
             params["inference_params"]["dataset_params"].pop('scaler_params', None)
         # TODO Move to other func
-        if params["dataset_params"]["class"] != "GeneralClassificationLoader" and params["dataset_params"]["class"] !="VariableSequenceLength":
+        if params["dataset_params"]["class"] not in [
+            "GeneralClassificationLoader",
+            "VariableSequenceLength",
+        ]:
             handle_model_evaluation1(trained_model, params, model_type)
 
+    elif model_type == "da_rnn":
+        from flood_forecast.da_rnn.train_da import da_rnn, train
+        from flood_forecast.preprocessing.preprocess_da_rnn import make_data
+        preprocessed_data = make_data(
+            params["dataset_params"]["training_path"],
+            params["dataset_params"]["target_col"],
+            params["dataset_params"]["forecast_length"])
+        config, model = da_rnn(preprocessed_data, len(dataset_params["target_col"]))
+        # All train functions return trained_model
+        trained_model = train(model, preprocessed_data, config)
     else:
         raise Exception("Please supply valid model type for forecasting or classification")
     return trained_model

@@ -267,9 +267,9 @@ class PyTorchTrainTests(unittest.TestCase):
             self.model_params)
         model3.save_model("output.pth", 2)
         self.model_params["model_params"]["output_seq_len"] = 7
-        self.model_params["weight_path_add"] = {}
-        self.model_params["weight_path_add"]["excluded_layers"] = [
-            "last_layer.weight", "last_layer.bias"]
+        self.model_params["weight_path_add"] = {
+            "excluded_layers": ["last_layer.weight", "last_layer.bias"]
+        }
         model = PyTorchForecast(
             "MultiAttnHeadSimple",
             self.keag_file,
@@ -349,7 +349,7 @@ class PyTorchTrainTests(unittest.TestCase):
 
     def test_scaling_data(self):
         scaled_src, _ = self.model.test_data[0]
-        data_unscaled = self.model.test_data.original_df.iloc[0:20]["cfs"].values
+        data_unscaled = self.model.test_data.original_df.iloc[:20]["cfs"].values
         print("shape bw")
         print(scaled_src[:, 0].shape)
         inverse_scale = self.model.test_data.inverse_scale(scaled_src[:, 0])

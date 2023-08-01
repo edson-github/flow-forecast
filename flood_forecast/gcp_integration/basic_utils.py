@@ -11,16 +11,14 @@ def get_storage_client(
     Utility function to return a properly authenticated GCS
     storage client whether working in Colab, CircleCI, Dataverse, or other environments.
     """
-    if service_key_path is None:
-        if os.environ["ENVIRONMENT_GCP"] == "Colab":
-            return storage.Client(project=os.environ["GCP_PROJECT"])
-        else:
-            import ast
-            cred_dict = ast.literal_eval(os.environ["ENVIRONMENT_GCP"])
-            credentials = Credentials.from_service_account_info(cred_dict)
-            return storage.Client(credentials=credentials, project=credentials.project_id)
-    else:
+    if service_key_path is not None:
         return storage.Client.from_service_account_json(service_key_path)
+    if os.environ["ENVIRONMENT_GCP"] == "Colab":
+        return storage.Client(project=os.environ["GCP_PROJECT"])
+    import ast
+    cred_dict = ast.literal_eval(os.environ["ENVIRONMENT_GCP"])
+    credentials = Credentials.from_service_account_info(cred_dict)
+    return storage.Client(credentials=credentials, project=credentials.project_id)
 
 
 def upload_file(
@@ -61,8 +59,4 @@ def download_file(
     blob = bucket.blob(source_blob_name)
     blob.download_to_filename(destination_file_name)
 
-    print(
-        "Blob {} downloaded to {}.".format(
-            source_blob_name, destination_file_name
-        )
-    )
+    print(f"Blob {source_blob_name} downloaded to {destination_file_name}.")

@@ -36,5 +36,4 @@ def make_data(
         height_df.columns = [target_col[0], target_col[1], 'precip', 'temp']
     else:
         height_df = final_df[[target_col[0]] + relevant_cols]
-    preprocessed_data2 = format_data(height_df, target_col)
-    return preprocessed_data2
+    return format_data(height_df, target_col)

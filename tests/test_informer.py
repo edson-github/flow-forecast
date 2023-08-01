@@ -126,23 +126,21 @@ class TestInformer(unittest.TestCase):
 
     def test_t_loade2(self):
         s_wargs = {
-                    "file_path": "tests/test_data/keag_small.csv",
-                    "forecast_history": 39,
-                    "forecast_length": 2,
-                    "target_col": ["cfs"],
-                    "relevant_cols": ["cfs", "temp", "precip"],
-                    "sort_column": "date",
-                    "feature_params":
-                    {
-                        "datetime_params": {
-                            "month": "numerical",
-                            "day": "numerical",
-                            "day_of_week": "numerical",
-                            "hour": "numerical"
-                        }
-                    }
+            "file_path": "tests/test_data/keag_small.csv",
+            "forecast_length": 2,
+            "target_col": ["cfs"],
+            "relevant_cols": ["cfs", "temp", "precip"],
+            "sort_column": "date",
+            "feature_params": {
+                "datetime_params": {
+                    "month": "numerical",
+                    "day": "numerical",
+                    "day_of_week": "numerical",
+                    "hour": "numerical",
                 }
-        s_wargs["forecast_history"] = 39
+            },
+            "forecast_history": 39,
+        }
         t_load = TemporalLoader(["month", "day"], s_wargs, 30)
         src, trg = t_load[0]
         self.assertEqual(trg[1].shape[0], 32)

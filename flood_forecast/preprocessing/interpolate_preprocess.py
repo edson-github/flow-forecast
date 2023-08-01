@@ -8,7 +8,7 @@ def fix_timezones(df: pd.DataFrame) -> pd.DataFrame:
     related to NaN values in non-eastern-time zones due
     to UTC conversion.
     """
-    the_count = df[0:2]['cfs'].isna().sum()
+    the_count = df[:2]['cfs'].isna().sum()
     return df[the_count:]
 
 

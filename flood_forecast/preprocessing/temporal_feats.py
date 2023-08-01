@@ -56,8 +56,7 @@ def feature_fix(preprocess_params: Dict, dt_column: str, df: pd.DataFrame):
         for key, value in preprocess_params["datetime_params"].items():
             df = create_feature(key, value, df, dt_column)
             if value == "cyclical":
-                column_names.append("cos_" + key)
-                column_names.append("sin_" + key)
+                column_names.extend(("cos_" + key, "sin_" + key))
             else:
                 column_names.append(key)
     return df, column_names
@@ -74,6 +73,6 @@ def cyclical(df: pd.DataFrame, feature_column: str) -> pd.DataFrame:
     :rtype: pd.DataFrame
     """
     df["norm"] = 2 * np.pi * df[feature_column] / df[feature_column].max()
-    df['cos_' + feature_column] = np.cos(df['norm'])
-    df['sin_' + feature_column] = np.sin(df['norm'])
+    df[f'cos_{feature_column}'] = np.cos(df['norm'])
+    df[f'sin_{feature_column}'] = np.sin(df['norm'])
     return df

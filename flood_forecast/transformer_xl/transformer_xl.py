@@ -149,8 +149,7 @@ class PositionwiseFF(nn.Module):
     def forward(self, input_: torch.FloatTensor,  # (cur_seq, bs, d_input)
                 ) -> torch.FloatTensor:  # (cur_seq, bs, d_input)
         ff_out = self.ff(input_)
-        output = self.layer_norm(input_ + ff_out)
-        return output
+        return self.layer_norm(input_ + ff_out)
 
 
 class DecoderBlock(nn.Module):

@@ -97,7 +97,7 @@ class Attention(nn.Module):
             mask[:(index + 1)] = 1
         else:
             while (index >= 0):
-                if ((index - log_l + 1) < 0):
+                if index - log_l < -1:
                     mask[:index] = 1
                     break
                 mask[index - log_l + 1:(index + 1)] = 1  # Local attention
@@ -117,9 +117,7 @@ class Attention(nn.Module):
         pre_att = pre_att * mask + -1e9 * (1 - mask)
         pre_att = activation(pre_att)
         pre_att = self.attn_dropout(pre_att)
-        attn = torch.matmul(pre_att, value)
-
-        return attn
+        return torch.matmul(pre_att, value)
 
     def merge_heads(self, x):
         x = x.permute(0, 2, 1, 3).contiguous()
@@ -129,10 +127,7 @@ class Attention(nn.Module):
     def split_heads(self, x, k=False):
         new_x_shape = x.size()[:-1] + (self.n_head, x.size(-1) // self.n_head)
         x = x.view(*new_x_shape)
-        if k:
-            return x.permute(0, 2, 3, 1)
-        else:
-            return x.permute(0, 2, 1, 3)
+        return x.permute(0, 2, 3, 1) if k else x.permute(0, 2, 1, 3)
 
     def forward(self, x):
 
@@ -164,12 +159,11 @@ class Conv1D(nn.Module):
             raise NotImplementedError
 
     def forward(self, x):
-        if self.rf == 1:
-            size_out = x.size()[:-1] + (self.out_dim,)
-            x = torch.addmm(self.b, x.view(-1, x.size(-1)), self.w)
-            x = x.view(*size_out)
-        else:
+        if self.rf != 1:
             raise NotImplementedError
+        size_out = x.size()[:-1] + (self.out_dim,)
+        x = torch.addmm(self.b, x.view(-1, x.size(-1)), self.w)
+        x = x.view(*size_out)
         return x
 
 
@@ -217,8 +211,7 @@ class Block(nn.Module):
         attn = self.attn(x)
         ln1 = self.ln_1(x + attn)
         mlp = self.mlp(ln1)
-        hidden = self.ln_2(ln1 + mlp)
-        return hidden
+        return self.ln_2(ln1 + mlp)
 
 
 class TransformerModel(nn.Module):

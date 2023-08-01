@@ -18,8 +18,10 @@ activation_dict = {"ReLU": torch.nn.ReLU(), "Softplus": torch.nn.Softplus(), "Sw
 
 
 def variable_forecast_layer(layer_type, layer_params):
-    final_layer_map = {"Linear": nn.Linear, "PositionWiseFeedForward": PositionwiseFeedForward}
-    return final_layer_map
+    return {
+        "Linear": nn.Linear,
+        "PositionWiseFeedForward": PositionwiseFeedForward,
+    }
 
 
 class PositionwiseFeedForward(nn.Module):

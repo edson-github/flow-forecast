@@ -15,10 +15,7 @@ class SimpleLinearModel(torch.nn.Module):
         self.n_time_series = n_time_series
         self.initial_layer = torch.nn.Linear(n_time_series, 1)
         self.probabilistic = probabilistic
-        if self.probabilistic:
-            self.output_len = 2
-        else:
-            self.output_len = output_seq_len
+        self.output_len = 2 if self.probabilistic else output_seq_len
         self.output_layer = torch.nn.Linear(seq_length, self.output_len)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -29,12 +26,11 @@ class SimpleLinearModel(torch.nn.Module):
         x = self.initial_layer(x)
         x = x.permute(0, 2, 1)
         x = self.output_layer(x)
-        if self.probabilistic:
-            mean = x[..., 0][..., None]
-            std = torch.clamp(x[..., 1][..., None], min=0.01)
-            return torch.distributions.Normal(mean, std)
-        else:
+        if not self.probabilistic:
             return x.view(-1, self.output_len)
+        mean = x[..., 0][..., None]
+        std = torch.clamp(x[..., 1][..., None], min=0.01)
+        return torch.distributions.Normal(mean, std)
 
 
 def handle_gaussian_loss(out: tuple):
