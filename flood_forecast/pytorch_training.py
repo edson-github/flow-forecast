@@ -22,8 +22,7 @@ def multi_crit(crit_multi: List, output, labels, valid=None):
             loss += compute_loss(labels[:, :, i], output[:, :, i], torch.rand(1, 2), crit, valid)
         else:
             loss += compute_loss(labels[:, i], output[:, i], torch.rand(1, 2), crit, valid)
-    summed_loss = loss
-    return summed_loss
+    return loss
 
 
 def handle_meta_data(model: PyTorchForecast):
@@ -60,10 +59,8 @@ def make_crit(model_params: Dict) -> Union[torch.nn.Module, List]:
         criterion_init_params = training_params["criterion_params"]
     if type(training_params["criterion"]) == list:
         criterion = []
-        i = 0
         for crit, param in zip(training_params["criterion"], criterion_init_params):
             res = pytorch_criterion_dict[crit](**param)
-            i += 1
             criterion.append(res)
     else:
         criterion = pytorch_criterion_dict[training_params["criterion"]](**criterion_init_params)
@@ -97,12 +94,10 @@ def train_transformer_style(
     worker_num = 1
     pin_memory = False
     dataset_params = model.params["dataset_params"]
-    num_targets = 1
-    if "n_targets" in model.params:
-        num_targets = model.params["n_targets"]
+    num_targets = model.params["n_targets"] if "n_targets" in model.params else 1
     if "num_workers" in dataset_params:
         worker_num = dataset_params["num_workers"]
-        print("using " + str(worker_num))
+        print(f"using {str(worker_num)}")
     if "pin_memory" in dataset_params:
         pin_memory = dataset_params["pin_memory"]
         print("Pin memory set to true")
@@ -113,10 +108,10 @@ def train_transformer_style(
     criterion = make_crit(training_params)
     opt = pytorch_opt_dict[training_params["optimizer"]](
         model.model.parameters(), **training_params["optim_params"])
-    if "probabilistic" in model.params["model_params"] or "probabilistic" in model.params:
-        probabilistic = True
-    else:
-        probabilistic = False
+    probabilistic = (
+        "probabilistic" in model.params["model_params"]
+        or "probabilistic" in model.params
+    )
     max_epochs = training_params["epochs"]
     data_loader = DataLoader(
         model.training,
@@ -155,9 +150,7 @@ def train_transformer_style(
         meta_model, meta_representation, meta_loss = handle_meta_data(model)
     if use_wandb:
         wandb.watch(model.model)
-    use_decoder = False
-    if "use_decoder" in model.params:
-        use_decoder = True
+    use_decoder = "use_decoder" in model.params
     session_params = []
     for epoch in range(max_epochs):
         total_loss = torch_single_train(
@@ -170,7 +163,7 @@ def train_transformer_style(
             meta_representation,
             meta_loss,
             multi_targets=num_targets)
-        print("The loss for epoch " + str(epoch))
+        print(f"The loss for epoch {str(epoch)}")
         print(total_loss)
         valid = compute_validation(
             validation_data_loader,
@@ -199,10 +192,12 @@ def train_transformer_style(
                 print("Stopping model now")
                 model.model.load_state_dict(torch.load("checkpoint.pth"))
                 break
-    decoder_structure = True
     the_ae = model.params["dataset_params"]["class"] == "AutoEncoder"
-    if the_ae or model.params["dataset_params"]["class"] == "GeneralClassificationLoader":
-        decoder_structure = False
+    decoder_structure = (
+        not the_ae
+        and model.params["dataset_params"]["class"]
+        != "GeneralClassificationLoader"
+    )
     test = compute_validation(
         test_data_loader,
         model.model,
@@ -299,8 +294,7 @@ def compute_loss(labels, output, src, criterion, validation_dataset, probabilist
             g_loss = GaussianLoss(output[0][:, :, 0], output[1][:, :, 0])
         else:
             g_loss = GaussianLoss(output[0][:, 0], output[1][:, 0])
-        loss = g_loss(labels)
-        return loss
+        return g_loss(labels)
     if not probabilistic and isinstance(output, torch.Tensor):
         if len(labels.shape) != len(output.shape):
             if len(labels.shape) > 1:
@@ -323,21 +317,20 @@ def compute_loss(labels, output, src, criterion, validation_dataset, probabilist
     if probabilistic:
         if len(labels.shape) != len(output.shape):
             output_dist = output_dist[:, :, 0]
-        loss = -output_dist.log_prob(labels.float()).sum()  # FIX THIS?
+        return -output_dist.log_prob(labels.float()).sum()
     elif isinstance(criterion, MASELoss):
         assert len(labels.shape) == len(output.shape)
-        loss = criterion(labels.float(), output, src, m)
+        return criterion(labels.float(), output, src, m)
     elif isinstance(criterion, CrossEntropyLoss):
         if len(labels.shape) > 2:
             labels = labels.permute(0, 2, 1)
             output = output.permute(0, 2, 1)
         labels = labels.max(dim=1)[1]
-        loss = criterion(output, labels)
+        return criterion(output, labels)
     else:
         assert len(labels.shape) == len(output.shape)
         assert labels.shape[0] == output.shape[0]
-        loss = criterion(output, labels.float())
-    return loss
+        return criterion(output, labels.float())
 
 
 def torch_single_train(model: PyTorchForecast,
@@ -396,7 +389,7 @@ def torch_single_train(model: PyTorchForecast,
                 met_loss.backward()
         if takes_target:
             forward_params["t"] = trg
-        elif "TemporalLoader" == model.params["dataset_params"]["class"]:
+        elif model.params["dataset_params"]["class"] == "TemporalLoader":
             forward_params["x_mark_enc"] = src[1].to(model.device)
             forward_params["x_dec"] = trg[1].to(model.device)
             forward_params["x_mark_dec"] = trg[0].to(model.device)
@@ -405,8 +398,6 @@ def torch_single_train(model: PyTorchForecast,
             trg = trg[0]
             trg[:, -pred_len:, :] = torch.zeros_like(trg[:, -pred_len:, :].long()).float().to(model.device)
             # Assign to avoid other if statement
-        elif "SeriesIDLoader" == model.params["dataset_params"]["class"]:
-            pass
         src = src.to(model.device)
         trg = trg.to(model.device)
         output = model.model(src, **forward_params)
@@ -440,9 +431,8 @@ def torch_single_train(model: PyTorchForecast,
         i += 1
     print("The running loss is: ")
     print(running_loss)
-    print("The number of items in train is: " + str(i))
-    total_loss = running_loss / float(i)
-    return total_loss
+    print(f"The number of items in train is: {str(i)}")
+    return running_loss / float(i)
 
 
 def handle_crit_list():

@@ -78,11 +78,10 @@ class ProbAttention(nn.Module):
         B, H, L_V, D = V.shape
         if not self.mask_flag:
             V_sum = V.sum(dim=-2)
-            contex = V_sum.unsqueeze(-2).expand(B, H, L_Q, V_sum.shape[-1]).clone()
+            return V_sum.unsqueeze(-2).expand(B, H, L_Q, V_sum.shape[-1]).clone()
         else:  # use mask
             assert (L_Q == L_V)  # requires that L_Q == L_V, i.e. for self-attention only
-            contex = V.cumsum(dim=-1)
-        return contex
+            return V.cumsum(dim=-1)
 
     def _update_context(self, context_in: torch.Tensor, V, scores, index, L_Q, attn_mask):
         B, H, L_V, D = V.shape

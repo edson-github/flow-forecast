@@ -87,9 +87,6 @@ class Concatenation(torch.nn.Module):
         """
         if self.repeat:
             meta_data = meta_data.repeat(1, temporal_data.shape[1], 1)
-        else:
-            # TODO figure out
-            pass
         x = torch.cat((temporal_data, meta_data), self.cat_dim)
         if self.use_layer:
             x = self.linear(x)

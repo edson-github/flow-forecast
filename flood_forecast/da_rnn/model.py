@@ -86,9 +86,7 @@ class DARNN(nn.Module):
             mean = y_pred[..., 0][..., None]
             std = torch.clamp(y_pred[..., 1][..., None], min=0.01)
             y_pred = torch.distributions.Normal(mean, std)
-        if self.final_act:
-            return self.final_act(y_pred)
-        return y_pred
+        return self.final_act(y_pred) if self.final_act else y_pred
 
 
 def init_hidden(x, hidden_size: int) -> torch.autograd.Variable:
@@ -204,10 +202,7 @@ class Decoder(nn.Module):
             self.gru_layer = nn.GRU(input_size=out_feats, hidden_size=decoder_hidden_size)
 
         self.fc = nn.Linear(encoder_hidden_size + out_feats, out_feats)
-        if self.probabalistic:
-            fc_final_out_feats = 2
-        else:
-            fc_final_out_feats = out_feats
+        fc_final_out_feats = 2 if self.probabalistic else out_feats
         self.fc_final = nn.Linear(decoder_hidden_size + encoder_hidden_size, fc_final_out_feats)
 
         self.fc.weight.data.normal_()

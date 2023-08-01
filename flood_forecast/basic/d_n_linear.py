@@ -17,7 +17,7 @@ class NLinear(nn.Module):
         self.n_targs = n_targs
         if self.individual:
             self.Linear = nn.ModuleList()
-            for i in range(self.channels):
+            for _ in range(self.channels):
                 self.Linear.append(nn.Linear(self.seq_len, self.pred_len2))
         else:
             self.Linear = nn.Linear(self.seq_len, self.pred_len2)
@@ -36,9 +36,7 @@ class NLinear(nn.Module):
         else:
             x = self.Linear(x.permute(0, 2, 1)).permute(0, 2, 1)
         x = x + seq_last
-        if self.n_targs == 1:
-            return x[:, :, -1]
-        return x  # [Batch, Output length, Channel]
+        return x[:, :, -1] if self.n_targs == 1 else x
 
 
 class MovingAvg(nn.Module):
@@ -104,13 +102,10 @@ class DLinear(nn.Module):
         if self.individual:
             self.Linear_Seasonal = nn.ModuleList()
             self.Linear_Trend = nn.ModuleList()
-            for i in range(self.channels):
+            for _ in range(self.channels):
                 self.Linear_Seasonal.append(nn.Linear(self.seq_len, self.pred_len2))
                 self.Linear_Trend.append(nn.Linear(self.seq_len, self.pred_len2))
 
-                # Use this two lines if you want to visualize the weights
-                # self.Linear_Seasonal[i].weight = nn.Parameter((1/self.seq_len)*torch.ones([self.pred_len,self.seq_len])
-                # self.Linear_Trend[i].weight = nn.Parameter((1/self.seq_len)*torch.ones([self.pred_len,self.seq_len]))
         else:
             self.Linear_Seasonal = nn.Linear(self.seq_len, self.pred_len2)
             self.Linear_Trend = nn.Linear(self.seq_len, self.pred_len2)
@@ -142,7 +137,4 @@ class DLinear(nn.Module):
             trend_output = self.Linear_Trend(trend_init)
         x = seasonal_output + trend_output
         x = x.permute(0, 2, 1)  # to [Badtch, Output length, Channel]
-        if self.n_targs == 1:
-            return x[:, :, -1]
-        else:
-            return x
+        return x[:, :, -1] if self.n_targs == 1 else x

@@ -62,12 +62,9 @@ def _prepare_background_tensor(
     background_batches = csv_test_loader.convert_history_batches(
         csv_test_loader.df.columns, background_data
     )
-    # remove last batch in the list because it may not be of
-    # size (history_len, num_feature) due to length of original df
-    background_tensor = torch.stack(
+    return torch.stack(
         random.sample(background_batches[:-1], backgound_batch_size)
     ).float()
-    return background_tensor
 
 
 def deep_explain_model_summary_plot(
@@ -100,14 +97,13 @@ def deep_explain_model_summary_plot(
     background_tensor = background_tensor.to(device)
     model.model.eval()
 
-    # background shape (L, N, M)
-    # L - batch size, N - history length, M - feature size
-    s_values_list = []
     if isinstance(history, list):
         model.model = model.model.to("cpu")
         deep_explainer = shap.DeepExplainer(model.model, history)
         shap_values = deep_explainer.shap_values(history)
-        s_values_list.append(shap_values)
+            # background shape (L, N, M)
+            # L - batch size, N - history length, M - feature size
+        s_values_list = [shap_values]
     else:
         deep_explainer = shap.DeepExplainer(model.model, background_tensor)
         shap_values = deep_explainer.shap_values(background_tensor)
@@ -127,8 +123,8 @@ def deep_explain_model_summary_plot(
     multi_shap_values = abs_mean_shap_values.mean(axis="observations")
     if use_wandb:
         wandb.log({"Overall feature ranking by shap values": fig})
-        for idx, col in enumerate(csv_test_loader.df.columns):
-            wandb.log({"shap_value_" + col: multi_shap_values})
+        for col in csv_test_loader.df.columns:
+            wandb.log({f"shap_value_{col}": multi_shap_values})
 
     # summary plot for multi-step outputs
     # multi_shap_values = shap_values.apply_along_axis(np.mean, 'batches')
@@ -139,11 +135,7 @@ def deep_explain_model_summary_plot(
         wandb.log({"Overall feature ranking per prediction time-step": fig})
 
     # summary plot for one prediction at datetime_start
-    if isinstance(history, list):
-        hist = history[0]
-    else:
-        hist = history
-
+    hist = history[0] if isinstance(history, list) else history
     history_numpy = torch.tensor(
         hist.cpu().numpy(), names=["batches", "observations", "features"]
     )
@@ -157,8 +149,8 @@ def deep_explain_model_summary_plot(
         shap_values, names=["preds", "batches", "observations", "features"]
     )
 
-    figs = plot_shap_values_from_history(shap_values, history_numpy)
     if use_wandb:
+        figs = plot_shap_values_from_history(shap_values, history_numpy)
         for fig, feature in zip(figs, csv_test_loader.df.columns.tolist()):
             wandb.log(
                 {
@@ -210,15 +202,14 @@ def deep_explain_model_heatmap(
     background_tensor = background_tensor.to(device)
     model.model.eval()
 
-    # background shape (L, N, M)
-    # L - batch size, N - history length, M - feature size
-    # for each element in each N x M batch in L,
-    # attribute to each prediction in forecast len
-    s_values_list = []
     if isinstance(history, list):
         deep_explainer = shap.DeepExplainer(model.model, history)
         shap_values = deep_explainer.shap_values(history)
-        s_values_list.append(shap_values)
+            # background shape (L, N, M)
+            # L - batch size, N - history length, M - feature size
+            # for each element in each N x M batch in L,
+            # attribute to each prediction in forecast len
+        s_values_list = [shap_values]
     else:
         deep_explainer = shap.DeepExplainer(model.model, background_tensor)
         shap_values = deep_explainer.shap_values(background_tensor)

@@ -103,10 +103,7 @@ class Crossformer(nn.Module):
         )
 
     def forward(self, x_seq: torch.Tensor):
-        if self.baseline:
-            base = x_seq.mean(dim=1, keepdim=True)
-        else:
-            base = 0
+        base = x_seq.mean(dim=1, keepdim=True) if self.baseline else 0
         batch_size = x_seq.shape[0]
         if self.in_len_add != 0:
             x_seq = torch.cat(
@@ -154,9 +151,7 @@ class SegMerging(nn.Module):
             pad_num = self.win_size - pad_num
             x = torch.cat((x, x[:, :, -pad_num:, :]), dim=-2)
 
-        seg_to_merge = []
-        for i in range(self.win_size):
-            seg_to_merge.append(x[:, :, i:: self.win_size, :])
+        seg_to_merge = [x[:, :, i:: self.win_size, :] for i in range(self.win_size)]
         x = torch.cat(seg_to_merge, -1)  # [B, ts_d, seg_num/win_size, win_size*d_model]
 
         x = self.norm(x)
@@ -184,7 +179,7 @@ class scale_block(nn.Module):
 
         self.encode_layers = nn.ModuleList()
 
-        for i in range(depth):
+        for _ in range(depth):
             self.encode_layers.append(
                 TwoStageAttentionLayer(seg_num, factor, d_model, n_heads, d_ff, dropout)
             )
@@ -241,9 +236,7 @@ class Encoder(nn.Module):
             )
 
     def forward(self, x):
-        encode_x = []
-        encode_x.append(x)
-
+        encode_x = [x]
         for block in self.encode_blocks:
             x = block(x)
             encode_x.append(x)
@@ -331,7 +324,7 @@ class Decoder(nn.Module):
 
         self.router = router
         self.decode_layers = nn.ModuleList()
-        for i in range(d_layers):
+        for _ in range(d_layers):
             self.decode_layers.append(
                 DecoderLayer(
                     seg_len, d_model, n_heads, d_ff, dropout, out_seg_num, factor
@@ -340,18 +333,14 @@ class Decoder(nn.Module):
 
     def forward(self, x, cross):
         final_predict = None
-        i = 0
-
         ts_d = x.shape[1]
-        for layer in self.decode_layers:
+        for i, layer in enumerate(self.decode_layers):
             cross_enc = cross[i]
             x, layer_predict = layer(x, cross_enc)
             if final_predict is None:
                 final_predict = layer_predict
             else:
                 final_predict = final_predict + layer_predict
-            i += 1
-
         final_predict = rearrange(
             final_predict,
             "b (out_d seg_num) seg_len -> b (seg_num seg_len) out_d",
@@ -475,11 +464,9 @@ class TwoStageAttentionLayer(nn.Module):
         dim_enc = dim_enc + self.dropout(self.MLP2(dim_enc))
         dim_enc = self.norm4(dim_enc)
 
-        final_out = rearrange(
+        return rearrange(
             dim_enc, "(b seg_num) ts_d d_model -> b ts_d seg_num d_model", b=batch
         )
-
-        return final_out
 
 
 class DSW_embedding(nn.Module):

@@ -58,8 +58,5 @@ class VanillaGRU(torch.nn.Module):
         if self.probablistic:
             mean = out[..., 0][..., None]
             std = torch.clamp(out[..., 1][..., None], min=0.01)
-            y_pred = torch.distributions.Normal(mean, std)
-            return y_pred
-        if self.fc.out_features == 1:
-            return out[:, :, 0]
-        return out
+            return torch.distributions.Normal(mean, std)
+        return out[:, :, 0] if self.fc.out_features == 1 else out

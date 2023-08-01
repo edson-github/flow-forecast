@@ -30,9 +30,7 @@ def make_criterion_functions(crit_list: List) -> List:
     """
     final_list = []
     if type(crit_list) == list:
-        for crit in crit_list:
-            final_list.append(pytorch_criterion_dict[crit]())
+        final_list.extend(pytorch_criterion_dict[crit]() for crit in crit_list)
     else:
-        for k, v in crit_list.items():
-            final_list.append(pytorch_criterion_dict[k](**v))
+        final_list.extend(pytorch_criterion_dict[k](**v) for k, v in crit_list.items())
     return final_list

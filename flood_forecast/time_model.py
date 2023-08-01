@@ -84,7 +84,7 @@ class TimeSeriesModel(ABC):
             upload_file(bucket_name, os.path.join("experiments", name), save_path, self.gcs_client)
             online_path = os.path.join("gs://", bucket_name, "experiments", name)
             if self.wandb:
-                wandb.config.update({"gcs_m_path_" + str(epoch) + file_type: online_path})
+                wandb.config.update({f"gcs_m_path_{str(epoch)}{file_type}": online_path})
 
     def wandb_init(self):
         if self.params["wandb"]:
@@ -112,7 +112,7 @@ class PyTorchForecast(TimeSeriesModel):
             params_dict: Dict):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         super().__init__(model_base, training_data, validation_data, test_data, params_dict)
-        print("Torch is using " + str(self.device))
+        print(f"Torch is using {str(self.device)}")
         if "weight_path_add" in params_dict:
             self.__freeze_layers__(params_dict["weight_path_add"])
 
@@ -125,30 +125,28 @@ class PyTorchForecast(TimeSeriesModel):
                     parameter.requires_grad = False
 
     def load_model(self, model_base: str, model_params: Dict, weight_path: str = None, strict=True):
-        if model_base in pytorch_model_dict:
-            model = pytorch_model_dict[model_base](**model_params)
-            if weight_path:
-                checkpoint = torch.load(weight_path, map_location=self.device)
-                if "weight_path_add" in self.params:
-                    if "excluded_layers" in self.params["weight_path_add"]:
-                        excluded_layers = self.params["weight_path_add"]["excluded_layers"]
-                        for layer in excluded_layers:
-                            del checkpoint[layer]
-                        print("sucessfully deleted layers")
-                    strict = False
-                model.load_state_dict(checkpoint, strict=strict)
-                print("Weights sucessfully loaded")
-            model.to(self.device)
-            # TODO create a general loop to convert all model tensor params to device
-            if hasattr(model, "mask"):
-                model.mask = model.mask.to(self.device)
-            if hasattr(model, "tgt_mask"):
-                model.tgt_mask = model.tgt_mask.to(self.device)
-        else:
+        if model_base not in pytorch_model_dict:
             raise Exception(
-                "Error the model " +
-                model_base +
-                " was not found in the model dict. Please add it.")
+                f"Error the model {model_base} was not found in the model dict. Please add it."
+            )
+        model = pytorch_model_dict[model_base](**model_params)
+        if weight_path:
+            checkpoint = torch.load(weight_path, map_location=self.device)
+            if "weight_path_add" in self.params:
+                if "excluded_layers" in self.params["weight_path_add"]:
+                    excluded_layers = self.params["weight_path_add"]["excluded_layers"]
+                    for layer in excluded_layers:
+                        del checkpoint[layer]
+                    print("sucessfully deleted layers")
+                strict = False
+            model.load_state_dict(checkpoint, strict=strict)
+            print("Weights sucessfully loaded")
+        model.to(self.device)
+        # TODO create a general loop to convert all model tensor params to device
+        if hasattr(model, "mask"):
+            model.mask = model.mask.to(self.device)
+        if hasattr(model, "tgt_mask"):
+            model.tgt_mask = model.tgt_mask.to(self.device)
         return model
 
     def save_model(self, final_path: str, epoch: int) -> None:
@@ -158,10 +156,10 @@ class PyTorchForecast(TimeSeriesModel):
         if not os.path.exists(final_path):
             os.mkdir(final_path)
         time_stamp = datetime.now().strftime("%d_%B_%Y%I_%M%p")
-        model_name = time_stamp + "_model.pth"
-        params_name = time_stamp + ".json"
+        model_name = f"{time_stamp}_model.pth"
+        params_name = f"{time_stamp}.json"
         model_save_path = os.path.join(final_path, model_name)
-        params_save_path = os.path.join(final_path, time_stamp + ".json")
+        params_save_path = os.path.join(final_path, f"{time_stamp}.json")
         torch.save(self.model.state_dict(), model_save_path)
         with open(params_save_path, "w+") as p:
             json.dump(self.params, p)
@@ -195,10 +193,10 @@ class PyTorchForecast(TimeSeriesModel):
         the_class = dataset_params["class"]
         start_end_params = scaling_function(start_end_params, dataset_params)
         # TODO clean up else if blocks
-        if loader_type + "_start" in dataset_params:
-            start_end_params["start_stamp"] = dataset_params[loader_type + "_start"]
-        if loader_type + "_end" in dataset_params:
-            start_end_params["end_stamp"] = dataset_params[loader_type + "_end"]
+        if f"{loader_type}_start" in dataset_params:
+            start_end_params["start_stamp"] = dataset_params[f"{loader_type}_start"]
+        if f"{loader_type}_end" in dataset_params:
+            start_end_params["end_stamp"] = dataset_params[f"{loader_type}_end"]
         if "interpolate" in dataset_params:
             start_end_params["interpolate_param"] = dataset_params["interpolate"]
         if "feature_param" in dataset_params:
@@ -217,61 +215,62 @@ class PyTorchForecast(TimeSeriesModel):
             start_end_params["target_col"] = dataset_params["relevant_cols"]
         is_proper_dataloader = loader_type == "test" and the_class == "default"
         if is_proper_dataloader and "forecast_test_len" in dataset_params:
-            loader = CSVDataLoader(
+            return CSVDataLoader(
                 data_path,
                 dataset_params["forecast_history"],
                 dataset_params["forecast_test_len"],
                 dataset_params["target_col"],
                 dataset_params["relevant_cols"],
-                **start_end_params)
+                **start_end_params
+            )
         elif the_class == "default":
-            loader = CSVDataLoader(
+            return CSVDataLoader(
                 data_path,
                 dataset_params["forecast_history"],
                 dataset_params["forecast_length"],
                 dataset_params["target_col"],
                 dataset_params["relevant_cols"],
-                **start_end_params)
-        elif the_class == "AutoEncoder":
-            loader = AEDataloader(
-                data_path,
-                dataset_params["relevant_cols"],
                 **start_end_params
+            )
+        elif the_class == "AutoEncoder":
+            return AEDataloader(
+                data_path, dataset_params["relevant_cols"], **start_end_params
             )
         elif the_class == "TemporalLoader":
             start_end_params = self.__re_add_params__(start_end_params, dataset_params, data_path)
-            label_len = 0
-            if "label_len" in dataset_params:
-                label_len = dataset_params["label_len"]
-            loader = TemporalLoader(
+            label_len = dataset_params["label_len"] if "label_len" in dataset_params else 0
+            return TemporalLoader(
                 dataset_params["temporal_feats"],
                 start_end_params,
-                label_len=label_len)
+                label_len=label_len,
+            )
         elif the_class == "SeriesIDLoader":
             start_end_params = self.__re_add_params__(start_end_params, dataset_params, data_path)
-            loader = CSVSeriesIDLoader(
+            return CSVSeriesIDLoader(
                 dataset_params["series_id_col"],
                 start_end_params,
-                dataset_params["return_method"]
+                dataset_params["return_method"],
             )
         elif the_class == "GeneralClassificationLoader":
             dataset_params["forecast_length"] = 1
             start_end_params = self.__re_add_params__(start_end_params, dataset_params, data_path)
             start_end_params["sequence_length"] = dataset_params["sequence_length"]
-            loader = GeneralClassificationLoader(start_end_params, dataset_params["n_classes"])
+            return GeneralClassificationLoader(
+                start_end_params, dataset_params["n_classes"]
+            )
         elif the_class == "VariableSequenceLength":
             start_end_params = self.__re_add_params__(start_end_params, dataset_params, data_path)
-            if "pad_len" in dataset_params:
-                pad_le = dataset_params["pad_len"]
-            else:
-                pad_le = None
-            loader = VariableSequenceLength(dataset_params["series_marker_column"], start_end_params,
-                                            pad_le, dataset_params["task"])
+            pad_le = dataset_params["pad_len"] if "pad_len" in dataset_params else None
+            return VariableSequenceLength(
+                dataset_params["series_marker_column"],
+                start_end_params,
+                pad_le,
+                dataset_params["task"],
+            )
 
         else:
             # TODO support custom DataLoader
-            loader = None
-        return loader
+            return None
 
 
 def scaling_function(start_end_params, dataset_params):

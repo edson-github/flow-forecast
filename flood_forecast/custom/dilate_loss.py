@@ -31,7 +31,7 @@ class DilateLoss(torch.nn.Module):
         if len(targets.size()) < 3:
             outputs = outputs.unsqueeze(2)
             targets = targets.unsqueeze(2)
-        batch_size, N_output = outputs.shape[0:2]
+        batch_size, N_output = outputs.shape[:2]
         loss_shape = 0
         softdtw_batch = SoftDTWBatch.apply
         D = torch.zeros((batch_size, N_output, N_output)).to(self.device)
@@ -43,8 +43,7 @@ class DilateLoss(torch.nn.Module):
         path = path_dtw(D, self.gamma)
         Omega = pairwise_distances(torch.range(1, N_output).view(N_output, 1)).to(self.device)
         loss_temporal = torch.sum(path * Omega) / (N_output * N_output)
-        loss = self.alpha * loss_shape + (1 - self.alpha) * loss_temporal
-        return loss
+        return self.alpha * loss_shape + (1 - self.alpha) * loss_temporal
 
 
 def pairwise_distances(x, y=None):

@@ -14,8 +14,8 @@ def jitter(points: torch.tensor) -> np.ndarray:
 def plot_shap_value_heatmaps(shap_values: torch.tensor,) -> List[go.Figure]:
     average_shap_value_over_batches = shap_values.mean(axis="batches")
 
-    x = [i for i in range(shap_values.align_to("observations", ...).shape[0])]
-    y = [i for i in range(shap_values.align_to("preds", ...).shape[0])]
+    x = list(range(shap_values.align_to("observations", ...).shape[0]))
+    y = list(range(shap_values.align_to("preds", ...).shape[0]))
 
     figs: List[go.Figure] = []
     for shap_values_features in average_shap_value_over_batches.align_to(

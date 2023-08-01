@@ -28,5 +28,4 @@ class DummyTorchModel(nn.Module):
         :rtype: torch.Tensor
         """
         batch_sz = x.size(0)
-        result = torch.ones(batch_sz, self.out_len, requires_grad=True, device=x.device)
-        return result
+        return torch.ones(batch_sz, self.out_len, requires_grad=True, device=x.device)
